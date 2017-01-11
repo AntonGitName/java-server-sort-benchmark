@@ -21,24 +21,21 @@ import java.util.concurrent.Executors;
 public class AsyncTcpServer implements Server {
 
     @Getter(AccessLevel.PACKAGE)
-    private final AsynchronousServerSocketChannel channel;
-    @Getter(AccessLevel.PACKAGE)
     private final ExecutorService executionService = Executors.newCachedThreadPool();
-    private boolean isRunning;
-
     private final List<Long> handleTimes = new ArrayList<>();
-
-    public void addHandleTime(long time) {
-        handleTimes.add(time);
-    }
+    @Getter(AccessLevel.PACKAGE)
+    private AsynchronousServerSocketChannel channel;
 
     public AsyncTcpServer(int port) throws IOException {
         channel = AsynchronousServerSocketChannel.open().bind(new InetSocketAddress(port));
     }
 
+    public void addHandleTime(long time) {
+        handleTimes.add(time);
+    }
+
     @Override
     public void start() {
-        isRunning = true;
         channel.accept(this, new ConnectionHandler());
     }
 
@@ -54,8 +51,10 @@ public class AsyncTcpServer implements Server {
 
     @Override
     public void close() throws IOException {
-        isRunning = false;
-        executionService.shutdownNow();
-        channel.close();
+        if (channel != null) {
+            channel.close();
+            executionService.shutdownNow();
+        }
+        channel = null;
     }
 }

@@ -27,7 +27,7 @@ import static ru.mit.spbau.antonpp.benchmark.app.ParameterType.NUMBER_CLIENTS;
 public class TestRunner {
 
     private static final int TEST_SERVER_PORT = 30001;
-    private static final int SETUP_TIME_MS = 500;
+    private static final int SETUP_TIME_MS = 100;
 
 
     private final TestConfig config;
@@ -83,6 +83,11 @@ public class TestRunner {
             }).average().orElse(0);
 
         } finally {
+            try {
+                server.close();
+            } catch (IOException e) {
+                throw new TestExecutionException("could not close  server", e);
+            }
             clientExecutor.shutdownNow();
             serverExecutor.shutdownNow();
         }
@@ -104,31 +109,24 @@ public class TestRunner {
     private TestReport runTest(int numRequests, int numClients, ServerMode mode, int delay, int arraySize, int i) throws TestExecutionException {
 
         int curTry = 0;
-        boolean started = false;
         Server server = null;
         IOException e3 = null;
-        while (!started && curTry++ < 5) {
+        while (curTry++ < 5) {
             try {
                 server = ServerFactory.create(TEST_SERVER_PORT, mode);
                 break;
             } catch (IOException e) {
                 try {
                     e3 = e;
-                    Thread.sleep(100);
-                    continue;
+                    Thread.sleep(SETUP_TIME_MS);
                 } catch (InterruptedException e1) {
                     throw new TestExecutionException("interrupted", e1);
                 }
             }
         }
         if (server != null) {
-            TestReport testReport = runTest(server, numRequests, numClients, mode, delay, arraySize);
-            try {
-                server.close();
-            } catch (IOException e) {
-                throw new TestExecutionException("could not close  server", e);
-            }
-            return testReport;
+
+            return runTest(server, numRequests, numClients, mode, delay, arraySize);
         } else {
             throw new TestExecutionException("Could not start server", e3);
         }

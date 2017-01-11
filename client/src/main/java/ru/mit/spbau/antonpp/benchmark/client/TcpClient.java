@@ -23,7 +23,6 @@ public class TcpClient extends AbstractClient {
     protected void send(DataInputStream dis, DataOutputStream dos, int arraySize) throws IOException {
         write(dos, arraySize);
         read(dis);
-        System.out.println("handled!");
     }
 
     @Override

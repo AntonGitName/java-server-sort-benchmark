@@ -1,6 +1,5 @@
 package ru.mit.spbau.antonpp.benchmark.server.impl.udp;
 
-import com.google.protobuf.InvalidProtocolBufferException;
 import lombok.extern.slf4j.Slf4j;
 import lombok.val;
 import ru.mit.spbau.antonpp.benchmark.server.impl.AbstractBenchmarkServer;
@@ -8,10 +7,7 @@ import ru.mit.spbau.antonpp.benchmark.server.impl.AbstractBenchmarkServer;
 import java.io.*;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
-import java.net.SocketAddress;
 import java.net.SocketException;
-import java.nio.channels.DatagramChannel;
-import java.util.Arrays;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -25,18 +21,9 @@ public class UdpServerWithExecutor extends AbstractBenchmarkServer {
     private static final int BUFFERS_SZ = 1024 * 1024;
 
     private final ExecutorService listenService = Executors.newSingleThreadExecutor();
-
-    @Override
-    public void start() {
-        listenService.execute(this::startListeningLoop);
-    }
-
     private final DatagramSocket socket;
     private final ExecutorService executionService;
-
     protected UdpServerWithExecutor(int port, ExecutorService executionService) throws SocketException {
-//        DatagramChannel channel = DatagramChannel.open().bind();
-//        socket = channel.socket();
         socket = new DatagramSocket(port);
         this.executionService = executionService;
         socket.setSendBufferSize(BUFFERS_SZ);
@@ -44,10 +31,12 @@ public class UdpServerWithExecutor extends AbstractBenchmarkServer {
     }
 
     @Override
+    public void start() {
+        listenService.execute(this::startListeningLoop);
+    }
+
+    @Override
     public final void close() throws IOException {
-
-        System.out.println("CLOSE");
-
         socket.close();
         listenService.shutdownNow();
         executionService.shutdownNow();

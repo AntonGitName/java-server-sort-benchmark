@@ -46,7 +46,6 @@ public abstract class AbstractClient {
     }
 
     protected void write(DataOutputStream dos, int arraySize) throws IOException {
-        System.out.println("writing");
         final Message.Data data = generateArray(arraySize);
         final byte[] bytes = data.toByteArray();
         dos.writeInt(bytes.length);
@@ -54,7 +53,6 @@ public abstract class AbstractClient {
     }
 
     protected void read(DataInputStream dis) throws IOException {
-        System.out.println("reading");
         final int responseSize = dis.readInt();
         final byte[] responseData = new byte[responseSize];
         int offset = 0;
@@ -74,7 +72,6 @@ public abstract class AbstractClient {
     public final long sendBenchmarkRequests(RequestConfig config) throws ServerUnavailableException, InterruptedException {
         final long start = System.currentTimeMillis();
         sendRequests(config);
-        System.out.println("handled!");
 
         final long end = System.currentTimeMillis();
         return end - start;

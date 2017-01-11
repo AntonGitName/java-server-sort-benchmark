@@ -3,7 +3,7 @@ package ru.mit.spbau.antonpp.benchmark.server.impl.tcp.async;
 import lombok.extern.slf4j.Slf4j;
 import lombok.val;
 
-import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.AsynchronousSocketChannel;
 import java.nio.channels.CompletionHandler;
@@ -15,7 +15,11 @@ import java.nio.channels.CompletionHandler;
 @Slf4j
 class ConnectionHandler implements CompletionHandler<AsynchronousSocketChannel, AsyncTcpServer> {
 
-    private static final int BUFFER_SIZE = 4096;
+    private static final int INT_SIZE = 4;
+
+    public static ByteBuffer createByteBuffer() {
+        return ByteBuffer.allocate(INT_SIZE);
+    }
 
     @Override
     public void completed(AsynchronousSocketChannel client, AsyncTcpServer server) {
@@ -26,18 +30,19 @@ class ConnectionHandler implements CompletionHandler<AsynchronousSocketChannel, 
                     .startTime(System.currentTimeMillis())
                     .server(server)
                     .clientChannel(client)
-                    .buffer(createByteBuffer())
-                    .data(new ByteArrayOutputStream())
+                .sizeBuffer(createByteBuffer())
+                .readingSize(true)
                     .build();
-            client.read(attachment.getBuffer(), attachment, new ReadHandler());
+        client.read(attachment.getSizeBuffer(), attachment, new ReadHandler());
     }
 
     @Override
     public void failed(Throwable e, AsyncTcpServer attachment) {
         log.error("Failed to handle connection", e);
-    }
-
-    private static ByteBuffer createByteBuffer() {
-        return ByteBuffer.allocate(BUFFER_SIZE);
+        try {
+            attachment.close();
+        } catch (IOException e1) {
+            e1.printStackTrace();
+        }
     }
 }

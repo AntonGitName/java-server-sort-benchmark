@@ -1,20 +1,15 @@
 package ru.mit.spbau.antonpp.benchmark.server.impl.tcp.sync;
 
 import lombok.extern.slf4j.Slf4j;
-import ru.mit.spbau.antonpp.benchmark.server.Server;
-import ru.mit.spbau.antonpp.benchmark.server.TaskHandler;
 import ru.mit.spbau.antonpp.benchmark.server.impl.AbstractBenchmarkServer;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * @author antonpp
@@ -23,30 +18,27 @@ import java.util.List;
 @Slf4j
 public abstract class AbstractTcpServer extends AbstractBenchmarkServer {
 
-    protected final ServerSocket socket;
+    protected final ServerSocketChannel channel;
     private final boolean keepConnection;
 
     protected AbstractTcpServer(int port, boolean keepConnection) throws IOException {
         this.keepConnection = keepConnection;
-        socket = new ServerSocket(port);
+        channel = ServerSocketChannel.open().bind(new InetSocketAddress(port));
     }
 
     protected abstract void onConnection(Socket client);
 
     @Override
     public void close() throws IOException {
-
-        System.out.println("CLOSE");
-
-        socket.close();
+        channel.close();
     }
 
     protected void startListeningLoop() {
         try {
-            while (!socket.isClosed()) {
-                final Socket clientSocket = socket.accept();
-                if (clientSocket != null) {
-                    onConnection(clientSocket);
+            while (channel.isOpen()) {
+                SocketChannel clientChannel = channel.accept();
+                if (clientChannel != null) {
+                    onConnection(clientChannel.socket());
                 }
             }
         } catch (IOException e) {

@@ -13,7 +13,8 @@ public class NonBlockingTcpServer extends TcpServerWithExecutor {
 
     public NonBlockingTcpServer(int port) throws IOException {
         super(port, Executors.newFixedThreadPool(MAX_THREADS), true);
-//        socket.configureBlocking(false);
+        channel.configureBlocking(false);
+        //        socket.configureBlocking(false);
     }
 
     @Override

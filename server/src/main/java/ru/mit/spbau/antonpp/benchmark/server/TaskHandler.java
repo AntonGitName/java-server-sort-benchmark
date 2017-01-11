@@ -1,6 +1,5 @@
 package ru.mit.spbau.antonpp.benchmark.server;
 
-import com.google.protobuf.InvalidProtocolBufferException;
 import lombok.val;
 import ru.mit.spbau.antonpp.benchmark.protocol.Message;
 import ru.mit.spbau.antonpp.benchmark.protocol.Message.Data;
@@ -44,19 +43,10 @@ public class TaskHandler {
         val length = dis.readInt();
         val data = new byte[length];
         int read = 0;
-//        dis.read(data);
         while (read < length) {
             read += dis.read(data, read, length - read);
         }
-
-        Data data1 = null;
-        try {
-            data1 = Data.parseFrom(data);
-        } catch (InvalidProtocolBufferException e) {
-            System.out.println(e);
-        }
-
-        Data input = data1;
+        val input = Data.parseFrom(data);
         val output = TaskHandler.sort(input);
         dos.writeInt(output.toByteArray().length);
         dos.write(output.toByteArray());
