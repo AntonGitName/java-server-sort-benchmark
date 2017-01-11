@@ -1,9 +1,9 @@
 package ru.mit.spbau.antonpp.benchmark.server;
 
 import ru.mit.spbau.antonpp.benchmark.server.impl.tcp.async.AsyncTcpServer;
-import ru.mit.spbau.antonpp.benchmark.server.impl.tcp.sync.BlockingTcpServer;
-import ru.mit.spbau.antonpp.benchmark.server.impl.tcp.sync.NonBlockingTcpServer;
-import ru.mit.spbau.antonpp.benchmark.server.impl.tcp.sync.SingleThreadTcpServer;
+import ru.mit.spbau.antonpp.benchmark.server.impl.tcp.sync.*;
+import ru.mit.spbau.antonpp.benchmark.server.impl.udp.FixedPoolUdpServer;
+import ru.mit.spbau.antonpp.benchmark.server.impl.udp.SimpleUdpServer;
 
 import java.io.IOException;
 import java.util.concurrent.Executors;
@@ -19,15 +19,19 @@ public class ServerFactory {
     public static Server create(int port, ServerMode mode) throws IOException {
         switch (mode) {
             case TCP_THREAD_PER_CLIENT:
-                return new BlockingTcpServer(port, new ThreadPoolExecutor(Integer.MAX_VALUE, Integer.MAX_VALUE, 0, TimeUnit.SECONDS, new LinkedBlockingQueue<>()), false);
+                return new SimpleTcpServer(port);
             case TCP_CACHED_POOL:
-                return new BlockingTcpServer(port, Executors.newCachedThreadPool(), true);
+                return new CachedPoolTcpServer(port);
             case TCP_NON_BLOCKING:
                 return new NonBlockingTcpServer(port);
             case TCP_ASYNC:
                 return new AsyncTcpServer(port);
             case TCP_ONE_THREAD:
                 return new SingleThreadTcpServer(port);
+            case UDP_FIXED_POOL:
+                return new FixedPoolUdpServer(port);
+            case UDP_THREAD_PER_REQUEST:
+                return new SimpleUdpServer(port);
             default:
                 throw new IllegalArgumentException("Unknown server mode");
         }

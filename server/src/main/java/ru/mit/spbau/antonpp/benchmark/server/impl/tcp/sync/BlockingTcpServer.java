@@ -11,17 +11,16 @@ import java.util.concurrent.Executors;
  * @since 20/12/2016
  */
 @Slf4j
-public class BlockingTcpServer extends TcpServerWithExecutor {
+public abstract class BlockingTcpServer extends TcpServerWithExecutor {
 
     private final ExecutorService listenService = Executors.newSingleThreadExecutor();
 
     @Override
     public void start() {
-        setRunning(true);
         listenService.execute(this::startListeningLoop);
     }
 
-    public BlockingTcpServer(int port, ExecutorService executionService, boolean keepConnection) throws IOException {
+    protected BlockingTcpServer(int port, ExecutorService executionService, boolean keepConnection) throws IOException {
         super(port, executionService, keepConnection);
     }
 

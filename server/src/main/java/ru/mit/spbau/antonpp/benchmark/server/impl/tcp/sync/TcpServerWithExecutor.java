@@ -26,7 +26,7 @@ public abstract class TcpServerWithExecutor extends AbstractTcpServer {
 
     @Override
     public void close() throws IOException {
-        executionService.shutdownNow();
         super.close();
+        executionService.shutdownNow();
     }
 }

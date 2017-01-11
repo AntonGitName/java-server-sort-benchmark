@@ -1,5 +1,6 @@
 package ru.mit.spbau.antonpp.benchmark.server;
 
+import com.google.protobuf.InvalidProtocolBufferException;
 import lombok.val;
 import ru.mit.spbau.antonpp.benchmark.protocol.Message;
 import ru.mit.spbau.antonpp.benchmark.protocol.Message.Data;
@@ -7,6 +8,7 @@ import ru.mit.spbau.antonpp.benchmark.protocol.Message.Data;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -16,16 +18,19 @@ import java.util.List;
 public class TaskHandler {
 
     private static Data sort(Data data) {
+        List<Integer> nums = new ArrayList<>(data.getDataList());
         boolean flag = true;
         while (flag) {
             flag = false;
-            for (int i = 0; i < data.getDataList().size() - 1; ++i) {
-                if (data.getDataList().get(i) > data.getDataList().get(i + 1)) {
-                    swap(data.getDataList(), i, i + 1);
+            for (int i = 0; i < nums.size() - 1; ++i) {
+                if (nums.get(i) > nums.get(i + 1)) {
+                    swap(nums, i, i + 1);
+                    flag = true;
                 }
             }
         }
-        return data;
+
+        return Message.Data.newBuilder().addAllData(nums).build();
     }
 
     private static void swap(List<Integer> list, int i, int j) {
@@ -39,12 +44,21 @@ public class TaskHandler {
         val length = dis.readInt();
         val data = new byte[length];
         int read = 0;
+//        dis.read(data);
         while (read < length) {
             read += dis.read(data, read, length - read);
         }
 
-        val input = Message.Data.parseFrom(data);
+        Data data1 = null;
+        try {
+            data1 = Data.parseFrom(data);
+        } catch (InvalidProtocolBufferException e) {
+            System.out.println(e);
+        }
+
+        Data input = data1;
         val output = TaskHandler.sort(input);
+        dos.writeInt(output.toByteArray().length);
         dos.write(output.toByteArray());
         final long end = System.currentTimeMillis();
         return end - start;

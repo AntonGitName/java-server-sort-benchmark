@@ -3,64 +3,54 @@ package ru.mit.spbau.antonpp.benchmark.server.impl.tcp.sync;
 import lombok.extern.slf4j.Slf4j;
 import ru.mit.spbau.antonpp.benchmark.server.Server;
 import ru.mit.spbau.antonpp.benchmark.server.TaskHandler;
+import ru.mit.spbau.antonpp.benchmark.server.impl.AbstractBenchmarkServer;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.function.Function;
 
 /**
  * @author antonpp
  * @since 21/12/2016
  */
 @Slf4j
-public abstract class AbstractTcpServer implements Server {
+public abstract class AbstractTcpServer extends AbstractBenchmarkServer {
 
-    protected final ServerSocketChannel channel;
+    protected final ServerSocket socket;
     private final boolean keepConnection;
-    private boolean isRunning;
-    private final List<Long> handleTimes = new ArrayList<>();
-    private final List<Long> serveTimes = new ArrayList<>();
 
     protected AbstractTcpServer(int port, boolean keepConnection) throws IOException {
         this.keepConnection = keepConnection;
-        channel = ServerSocketChannel.open().bind(new InetSocketAddress(port));
+        socket = new ServerSocket(port);
     }
 
     protected abstract void onConnection(Socket client);
 
-    public void setRunning(boolean running) {
-        isRunning = running;
-    }
-
-    public boolean isRunning() {
-        return isRunning;
-    }
-
     @Override
     public void close() throws IOException {
-        isRunning = false;
-        channel.close();
+
+        System.out.println("CLOSE");
+
+        socket.close();
     }
 
     protected void startListeningLoop() {
         try {
-            while (isRunning()) {
-                try (final SocketChannel socketChannel = channel.accept()) {
-                    if (socketChannel != null) {
-                        onConnection(socketChannel.socket());
-                    }
+            while (!socket.isClosed()) {
+                final Socket clientSocket = socket.accept();
+                if (clientSocket != null) {
+                    onConnection(clientSocket);
                 }
             }
         } catch (IOException e) {
             log.error("Could not accept new connections", e);
-            isRunning = false;
         }
 
     }
@@ -70,8 +60,9 @@ public abstract class AbstractTcpServer implements Server {
              DataInputStream dis = new DataInputStream(client.getInputStream())) {
             final long start = System.currentTimeMillis();
             while (true) {
-                handleTimes.add(TaskHandler.handle(dis, dos));
-                if (!keepConnection) {
+                benchmarkHandle(dis, dos);
+                if (!keepConnection || client.isClosed()) {
+                    client.close();
                     break;
                 }
             }
@@ -80,15 +71,5 @@ public abstract class AbstractTcpServer implements Server {
         } catch (IOException e) {
             log.warn("Failed to handle request", e);
         }
-    }
-
-    @Override
-    public double getAverageRequestHandleTime() {
-        return handleTimes.stream().mapToLong(x -> x).average().orElse(0);
-    }
-
-    @Override
-    public double getAverageClientServeTime() {
-        return serveTimes.stream().mapToLong(x -> x).average().orElse(0);
     }
 }

@@ -1,7 +1,7 @@
 package ru.mit.spbau.antonpp.benchmark.app;
 
 import lombok.extern.slf4j.Slf4j;
-import ru.mit.spbau.antonpp.benchmark.client.Client;
+import ru.mit.spbau.antonpp.benchmark.client.AbstractClient;
 import ru.mit.spbau.antonpp.benchmark.client.execeptions.ServerUnavailableException;
 import ru.mit.spbau.antonpp.benchmark.server.Server;
 import ru.mit.spbau.antonpp.benchmark.server.ServerFactory;
@@ -26,31 +26,41 @@ import static ru.mit.spbau.antonpp.benchmark.app.ParameterType.NUMBER_CLIENTS;
 @Slf4j
 public class TestRunner {
 
+    private static final int TEST_SERVER_PORT = 30001;
+    private static final int SETUP_TIME_MS = 500;
+
+
     private final TestConfig config;
 
     public TestRunner(TestConfig config) {
         this.config = config;
     }
 
-    private TestReport runTest(int numRequests, int numClients, ServerMode mode, int delay, int arraySize) throws TestExecutionException {
-        try (Server server = ServerFactory.create(8081, mode)) {
-            final List<Client> clients = new ArrayList<>(numClients);
-            IntStream.range(0, numClients).forEach(x -> clients.add(new Client("localhost", 31001 + x)));
-            final ExecutorService serverExecutor = Executors.newSingleThreadExecutor();
-            serverExecutor.execute(server::start);
-            final ExecutorService clientExecutor = Executors.newFixedThreadPool(numClients);
-            final Client.RequestConfig requestConfig = Client.RequestConfig.builder()
-                    .numRequests(numRequests)
-                    .arraySize(arraySize)
-                    .sendDelay(delay)
-                    .keepConnection(mode.isKeepConnection())
-                    .build();
+    private TestReport runTest(Server server, int numRequests, int numClients, ServerMode mode, int delay, int arraySize) throws TestExecutionException {
+        final List<AbstractClient> clients = new ArrayList<>(numClients);
+        IntStream.range(0, numClients).forEach(x -> clients.add(ClientFactory.create(mode, "localhost", TEST_SERVER_PORT)));
+        final ExecutorService serverExecutor = Executors.newSingleThreadExecutor();
+        serverExecutor.execute(server::start);
+
+        final ExecutorService clientExecutor = Executors.newFixedThreadPool(numClients);
+        final AbstractClient.RequestConfig requestConfig = AbstractClient.RequestConfig.builder()
+                .numRequests(numRequests)
+                .arraySize(arraySize)
+                .sendDelay(delay)
+                .build();
+
+        log.info("Starting test: {}", requestConfig);
+
+        final ExecutionException executionException[] = {null};
+        final double averageClientWorkTime;
+
+        try {
 
             List<Future<Long>> futures = new ArrayList<>(numClients);
-            for (Client client : clients) {
+            for (AbstractClient client : clients) {
                 futures.add(clientExecutor.submit(() -> {
                     try {
-                        return client.sendRequests(requestConfig);
+                        return client.sendBenchmarkRequests(requestConfig);
                     } catch (ServerUnavailableException e) {
                         throw new TestExecutionException(e.getMessage(), e.getCause());
                     } catch (InterruptedException e) {
@@ -58,25 +68,69 @@ public class TestRunner {
                     }
                 }));
             }
-            final double averageClientWorkTime = futures.stream().mapToLong(x -> {
+
+            averageClientWorkTime = futures.stream().mapToLong(x -> {
                 try {
                     return x.get();
-                } catch (InterruptedException | ExecutionException e) {
+                } catch (InterruptedException e) {
+                    log.error("Interrupted during execution", e);
+                    return Long.MAX_VALUE;
+                } catch (ExecutionException e) {
                     log.error("Error during execution", e);
+                    executionException[0] = e;
                     return Long.MAX_VALUE;
                 }
             }).average().orElse(0);
 
+        } finally {
             clientExecutor.shutdownNow();
             serverExecutor.shutdownNow();
+        }
 
-            return TestReport.builder()
-                    .clientWorkTime(averageClientWorkTime)
-                    .clientServeTime(server.getAverageClientServeTime())
-                    .requestHandleTime(server.getAverageRequestHandleTime())
-                    .build();
-        } catch (IOException e) {
-            throw new TestExecutionException("Could not start/stop server", e);
+        if (executionException[0] != null) {
+            throw new TestExecutionException(executionException[0].getMessage(), executionException[0].getCause());
+        }
+
+
+        log.info("test finished");
+
+        return TestReport.builder()
+                .clientWorkTime(averageClientWorkTime)
+                .clientServeTime(server.getAverageClientServeTime())
+                .requestHandleTime(server.getAverageRequestHandleTime())
+                .build();
+    }
+
+    private TestReport runTest(int numRequests, int numClients, ServerMode mode, int delay, int arraySize, int i) throws TestExecutionException {
+
+        int curTry = 0;
+        boolean started = false;
+        Server server = null;
+        IOException e3 = null;
+        while (!started && curTry++ < 5) {
+            try {
+                server = ServerFactory.create(TEST_SERVER_PORT, mode);
+                break;
+            } catch (IOException e) {
+                try {
+                    e3 = e;
+                    Thread.sleep(100);
+                    continue;
+                } catch (InterruptedException e1) {
+                    throw new TestExecutionException("interrupted", e1);
+                }
+            }
+        }
+        if (server != null) {
+            TestReport testReport = runTest(server, numRequests, numClients, mode, delay, arraySize);
+            try {
+                server.close();
+            } catch (IOException e) {
+                throw new TestExecutionException("could not close  server", e);
+            }
+            return testReport;
+        } else {
+            throw new TestExecutionException("Could not start server", e3);
         }
     }
 
@@ -84,7 +138,7 @@ public class TestRunner {
 
         final List<TestReport> reports = new ArrayList<>();
 
-        for (int i = config.getParamLower(); i < config.getParamUpper(); i += config.getParamStep()) {
+        for (int i = config.getParamLower(), j = 0; i < config.getParamUpper(); i += config.getParamStep()) {
             final int numClients;
             final int delay;
             final int arraySize;
@@ -126,7 +180,7 @@ public class TestRunner {
                     throw new IllegalStateException();
             }
 
-            reports.add(runTest(config.getNumRequests(), numClients, config.getMode(), delay, arraySize));
+            reports.add(runTest(config.getNumRequests(), numClients, config.getMode(), delay, arraySize, j++));
         }
         return reports;
     }

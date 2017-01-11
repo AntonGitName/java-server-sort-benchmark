@@ -11,21 +11,30 @@ import ru.mit.spbau.antonpp.benchmark.protocol.Message;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
-import java.net.Socket;
 import java.util.Random;
 
 /**
  * @author antonpp
  * @since 21/12/2016
  */
-public class Client {
+public abstract class AbstractClient {
+//
+//    public static void main(String[] args) {
+//        AbstractClient client = new AbstractClient("localhost", 31001);
+//        try {
+//            client.sendRequests(RequestConfig.builder().keepConnection(false).arraySize(10).numRequests(10).build());
+//        } catch (ServerUnavailableException | InterruptedException e) {
+//            e.printStackTrace();
+//        }
+//    }
+
 
     private static final Random RND = new Random();
 
-    private final String host;
-    private final int port;
+    protected final String host;
+    protected final int port;
 
-    public Client(String host, int port) {
+    public AbstractClient(String host, int port) {
         this.host = host;
         this.port = port;
     }
@@ -36,11 +45,16 @@ public class Client {
         return builder.build();
     }
 
-    private void send(DataInputStream dis, DataOutputStream dos, int arraySize) throws IOException {
+    protected void write(DataOutputStream dos, int arraySize) throws IOException {
+        System.out.println("writing");
         final Message.Data data = generateArray(arraySize);
         final byte[] bytes = data.toByteArray();
         dos.writeInt(bytes.length);
         dos.write(bytes);
+    }
+
+    protected void read(DataInputStream dis) throws IOException {
+        System.out.println("reading");
         final int responseSize = dis.readInt();
         final byte[] responseData = new byte[responseSize];
         int offset = 0;
@@ -55,45 +69,20 @@ public class Client {
     }
 
 
-    public long sendRequests(RequestConfig config) throws ServerUnavailableException, InterruptedException {
+    protected abstract void sendRequests(RequestConfig config) throws ServerUnavailableException, InterruptedException;
+
+    public final long sendBenchmarkRequests(RequestConfig config) throws ServerUnavailableException, InterruptedException {
         final long start = System.currentTimeMillis();
-        if (config.isKeepConnection()) {
-            openConnection((dis, dos) -> {
-                for (int i = 0; i < config.getNumRequests(); ++i) {
-                    send(dis, dos, config.getArraySize());
-                    Thread.sleep(config.getSendDelay());
-                }
-            });
-        } else {
-            for (int i = 0; i < config.getNumRequests(); ++i) {
-                openConnection((dis, dos) -> send(dis, dos, config.getArraySize()));
-                Thread.sleep(config.getSendDelay());
-            }
-        }
+        sendRequests(config);
+        System.out.println("handled!");
+
         final long end = System.currentTimeMillis();
         return end - start;
-    }
-
-    private void openConnection(ConnectionHandler handler) throws ServerUnavailableException, InterruptedException {
-        try (Socket socket = new Socket(host, port);
-             DataInputStream dis = new DataInputStream(socket.getInputStream());
-             DataOutputStream dos = new DataOutputStream(socket.getOutputStream())) {
-
-            handler.handle(dis, dos);
-
-        } catch (IOException e) {
-            throw new ServerUnavailableException("Could not connect to server", e);
-        }
-    }
-
-    private interface ConnectionHandler {
-        void handle(DataInputStream dis, DataOutputStream dos) throws IOException, InterruptedException;
     }
 
     @Data
     @Builder
     public static class RequestConfig {
-        private final boolean keepConnection;
         private final int numRequests;
         private final int arraySize;
         private final long sendDelay;

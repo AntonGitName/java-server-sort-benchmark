@@ -3,6 +3,8 @@ package ru.mit.spbau.antonpp.benchmark.app;
 import lombok.Builder;
 import lombok.Data;
 
+import java.util.Date;
+
 /**
  * @author antonpp
  * @since 25/12/2016

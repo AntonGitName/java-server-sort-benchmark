@@ -17,6 +17,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Collections;
+import java.util.Date;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
@@ -34,14 +35,7 @@ import static ru.mit.spbau.antonpp.benchmark.app.ParameterType.NUMBER_CLIENTS;
 @Slf4j
 public class Application extends JFrame {
 
-    private static final Path RESULTS_DIR = Paths.get("results");
-    public static final String REPORT_PREFIX = "report-";
-    private static final DirectoryStream.Filter<Path> REPORT_FILTER =
-            file -> (Files.isDirectory(file) && file.getFileName().toString().startsWith(REPORT_PREFIX));
-
-    public static final String REPORTS[] = {"CST", "CWT", "RHT"};
-
-    private InfiniteProgressPanel testProgress;
+        private InfiniteProgressPanel testProgress;
     private final ExecutorService testExecutor = Executors.newSingleThreadExecutor();
     private final ResultTableModel tableModel;
 
@@ -62,7 +56,8 @@ public class Application extends JFrame {
             }
         });
 
-        tableModel = new ResultTableModel(reloadTests(), this);
+        tableModel = new ResultTableModel(Collections.emptyList(), this);
+        reloadTests();
 
         createUIElements();
 
@@ -97,9 +92,9 @@ public class Application extends JFrame {
         final JLabel label4 = new JLabel();
         final JTextField param1 = new JTextField("10");
         final JTextField param2 = new JTextField("20");
-        final JTextField param3 = new JTextField("10");
+        final JTextField param3 = new JTextField("1");
         final JTextField param4 = new JTextField("100");
-        final JTextField step = new JTextField("2");
+        final JTextField step = new JTextField("1");
 
         final Consumer<ParameterType> f = item -> {
             label1.setText(item + " lower bound:");
@@ -174,69 +169,33 @@ public class Application extends JFrame {
     }
 
     private void onTestFinish() {
-        tableModel.resetRows(reloadTests());
+        reloadTests();
         testProgress.stop();
     }
 
-    private List<Path> reloadTests() {
+    private void reloadTests() {
         try {
-            if (!Files.exists(RESULTS_DIR)) {
-                 log.info("No previous test reports found");
-                 return Collections.emptyList();
-            }
-
-            try (DirectoryStream<Path> stream = Files.newDirectoryStream(RESULTS_DIR, REPORT_FILTER)) {
-                return StreamSupport.stream(stream.spliterator(), false).collect(Collectors.toList());
-            }
-        }
-        catch (IOException e) {
+          tableModel.resetRows(Util.listReports());
+        } catch (IOException e) {
             handleRecoverableError("Could not load test reports", e);
-            return Collections.emptyList();
         }
     }
 
     private void saveReports(List<TestReport> reports, TestConfig config) {
         try {
-            if (!Files.exists(RESULTS_DIR)) {
-                Files.createDirectory(RESULTS_DIR);
+            if (!Files.exists(Util.RESULTS_DIR)) {
+                Files.createDirectory(Util.RESULTS_DIR);
             }
-            final String testName = REPORT_PREFIX + UUID.randomUUID();
+            val testName = Util.REPORT_PREFIX + UUID.randomUUID();
+            val testPath = Util.RESULTS_DIR.resolve(testName);
 
-            val testPath = RESULTS_DIR.resolve(testName);
             Files.createDirectory(testPath);
 
-            try (PrintWriter pw = new PrintWriter(testPath.resolve(REPORTS[0]).toFile())) {
-                printHeader(pw, config);
-                for (TestReport report : reports) {
-                    pw.println(report.getClientServeTime());
-                }
-            }
-            try (PrintWriter pw = new PrintWriter(testPath.resolve(REPORTS[1]).toFile())) {
-                printHeader(pw, config);
-                for (TestReport report : reports) {
-                    pw.println(report.getClientWorkTime());
-                }
-            }
-            try (PrintWriter pw = new PrintWriter(testPath.resolve(REPORTS[2]).toFile())) {
-                printHeader(pw, config);
-                for (TestReport report : reports) {
-                    pw.println(report.getRequestHandleTime());
-                }
-            }
+            Util.writeConfig(testName, config);
+            Util.writeReports(testName, reports);
         } catch (IOException e) {
             handleRecoverableError("Failed to save report", e);
         }
-    }
-
-    private static void printHeader(PrintWriter pw, TestConfig config) {
-        pw.println(config.getMode());
-        pw.println(config.getNumRequests());
-        pw.println(config.getParameterType());
-        pw.println(config.getParamLower());
-        pw.println(config.getParamUpper());
-        pw.println(config.getParamStep());
-        pw.println(config.getParam1());
-        pw.println(config.getParam2());
     }
 
     private void handleRecoverableError(String msg, Throwable e) {
