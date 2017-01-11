@@ -1,0 +1,9 @@
+syntax = "proto3";
+
+option java_package = "ru.mit.spbau.antonpp.benchmark.protocol";
+option java_outer_classname = "Message";
+
+
+message Data {
+    repeated int32 data = 1 [packed=true];
+}

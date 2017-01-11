@@ -1,0 +1,21 @@
+group 'ru.mit.spbau.antonpp'
+version '1.0'
+
+apply plugin: 'java'
+
+sourceCompatibility = 1.8
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    compile project(':client')
+    compile project(':server')
+
+    // lombok annotations
+    compileOnly "org.projectlombok:lombok:1.16.10"
+
+    // logging
+    compile group: 'org.slf4j', name: 'slf4j-log4j12', version: '1.2'
+}

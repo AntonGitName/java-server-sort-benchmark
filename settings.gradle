@@ -1,0 +1,6 @@
+rootProject.name = 'java-server-sort-benchmark'
+include 'commons'
+include 'server'
+include 'client'
+include 'app'
+

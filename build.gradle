@@ -1,0 +1,8 @@
+allprojects {
+    group = 'ru.mit.spbau.antonpp'
+    version = '1.0'
+}
+task wrapper(type: Wrapper) {
+  gradleVersion = '3.1'
+  distributionUrl = "https://services.gradle.org/distributions/gradle-$gradleVersion-all.zip"
+}
