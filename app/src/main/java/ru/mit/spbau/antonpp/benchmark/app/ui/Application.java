@@ -1,33 +1,30 @@
-package ru.mit.spbau.antonpp.benchmark.app;
+package ru.mit.spbau.antonpp.benchmark.app.ui;
 
 import lombok.extern.slf4j.Slf4j;
 import lombok.val;
-import ru.mit.spbau.antonpp.benchmark.app.panels.ResultTableModel;
-import ru.mit.spbau.antonpp.benchmark.client.Client;
-import ru.mit.spbau.antonpp.benchmark.client.execeptions.ServerUnavailableException;
-import ru.mit.spbau.antonpp.benchmark.server.Server;
-import ru.mit.spbau.antonpp.benchmark.server.ServerFactory;
+import ru.mit.spbau.antonpp.benchmark.app.*;
+import ru.mit.spbau.antonpp.benchmark.app.ui.panels.InfiniteProgressPanel;
+import ru.mit.spbau.antonpp.benchmark.app.ui.panels.ResultTableModel;
 import ru.mit.spbau.antonpp.benchmark.server.ServerMode;
 
 import javax.swing.*;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.nio.file.DirectoryStream;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 import java.util.function.Consumer;
-import java.util.stream.IntStream;
+import java.util.stream.Collectors;
+import java.util.stream.StreamSupport;
 
-import static ru.mit.spbau.antonpp.benchmark.app.ParameterType.DELAY;
 import static ru.mit.spbau.antonpp.benchmark.app.ParameterType.NUMBER_CLIENTS;
 
 /**
@@ -38,6 +35,15 @@ import static ru.mit.spbau.antonpp.benchmark.app.ParameterType.NUMBER_CLIENTS;
 public class Application extends JFrame {
 
     private static final Path RESULTS_DIR = Paths.get("results");
+    public static final String REPORT_PREFIX = "report-";
+    private static final DirectoryStream.Filter<Path> REPORT_FILTER =
+            file -> (Files.isDirectory(file) && file.getFileName().toString().startsWith(REPORT_PREFIX));
+
+    public static final String REPORTS[] = {"CST", "CWT", "RHT"};
+
+    private InfiniteProgressPanel testProgress;
+    private final ExecutorService testExecutor = Executors.newSingleThreadExecutor();
+    private final ResultTableModel tableModel;
 
     public static void main(String[] args) {
         SwingUtilities.invokeLater(Application::new);
@@ -52,9 +58,11 @@ public class Application extends JFrame {
         addWindowListener(new WindowAdapter() {
             @Override
             public void windowClosing(WindowEvent we) {
-
+                testExecutor.shutdownNow();
             }
         });
+
+        tableModel = new ResultTableModel(reloadTests(), this);
 
         createUIElements();
 
@@ -64,14 +72,20 @@ public class Application extends JFrame {
     private void createUIElements() {
         JPanel panel = new JPanel();
         panel.setLayout(new BoxLayout(panel, BoxLayout.PAGE_AXIS));
-        final ResultTableModel tableModel = new ResultTableModel();
         final JTable table = new JTable(tableModel);
+        table.setDefaultRenderer(JButton.class, new ButtonRenderer());
+        table.setRowHeight(table.getRowHeight() * 2);
+        table.getColumn(tableModel.getColumnName(1)).setCellEditor(new ResultCellEditor());
+        table.addMouseListener(new TableMouseListener(table));
+//        table.setFillsViewportHeight(true);
         JScrollPane scrollPane = new JScrollPane(table);
         panel.add(scrollPane);
         final JButton button = new JButton("Create new Test");
         panel.add(button);
         button.addActionListener(e -> onCreateTest());
         add(panel);
+        testProgress = new InfiniteProgressPanel("Tests are running. Please wait...");
+        setGlassPane(testProgress);
     }
 
     private void onCreateTest() {
@@ -81,11 +95,11 @@ public class Application extends JFrame {
         final JLabel label2 = new JLabel();
         final JLabel label3 = new JLabel();
         final JLabel label4 = new JLabel();
-        final JTextField param1 = new JTextField();
-        final JTextField param2 = new JTextField();
-        final JTextField param3 = new JTextField();
-        final JTextField param4 = new JTextField();
-        final JTextField step = new JTextField();
+        final JTextField param1 = new JTextField("10");
+        final JTextField param2 = new JTextField("20");
+        final JTextField param3 = new JTextField("10");
+        final JTextField param4 = new JTextField("100");
+        final JTextField step = new JTextField("2");
 
         final Consumer<ParameterType> f = item -> {
             label1.setText(item + " lower bound:");
@@ -130,6 +144,7 @@ public class Application extends JFrame {
                         .paramLower(Integer.valueOf(param1.getText()))
                         .paramUpper(Integer.valueOf(param2.getText()))
                         .paramStep(Integer.valueOf(step.getText()))
+                        .parameterType(comboBox2.getItemAt(comboBox2.getSelectedIndex()))
                         .build();
                 startTests(config);
             } catch (NumberFormatException e) {
@@ -139,73 +154,81 @@ public class Application extends JFrame {
     }
 
     private void startTests(TestConfig config) {
-        final List<TestReport> reports = new ArrayList<>();
-        for (int i = config.getParamLower(); i < config.getParamUpper(); i += config.getParamStep()) {
-            final int numClients;
-            final int delay;
-            final int arraySize;
-            final ParameterType type = config.getParameterType();
-            switch (type) {
-                case DELAY:
-                    delay = i;
-                    if (type.getSecond() == NUMBER_CLIENTS) {
-                        numClients = config.getParam1();
-                        arraySize = config.getParam2();
-                    } else {
-                        arraySize = config.getParam1();
-                        numClients = config.getParam2();
-                    }
-                    break;
-                case ARRAY_SIZE:
-                    arraySize = i;
-                    if (type.getSecond() == NUMBER_CLIENTS) {
-                        numClients = config.getParam1();
-                        delay = config.getParam2();
-                    } else {
-                        delay = config.getParam1();
-                        numClients = config.getParam2();
-                    }
-                    break;
-                case NUMBER_CLIENTS:
-                    numClients = i;
-                    if (type.getSecond() == DELAY) {
-                        delay = config.getParam1();
-                        arraySize = config.getParam2();
-                    } else {
-                        arraySize = config.getParam1();
-                        delay = config.getParam2();
-                    }
-                    break;
-                default:
-                    throw new IllegalStateException();
+        final TestRunner testRunner = new TestRunner(config);
+
+        testProgress.start();
+        testExecutor.submit(() -> {
+            try {
+                final List<TestReport> reports = testRunner.run();
+                saveReports(reports, config);
+                SwingUtilities.invokeLater(this::onTestFinish);
+            } catch (TestExecutionException e) {
+                SwingUtilities.invokeLater(() -> onTestFail(e));
             }
-            reports.add(runTest(config.getNumRequests(), numClients, config.getMode(), delay, arraySize));
+        });
+    }
+
+    private void onTestFail(TestExecutionException e) {
+        handleRecoverableError(e.getMessage(), e.getCause());
+        testProgress.stop();
+        revalidate();
+        repaint();
+    }
+
+    private void onTestFinish() {
+        tableModel.resetRows(reloadTests());
+        testProgress.stop();
+        revalidate();
+        repaint();
+    }
+
+    private List<Path> reloadTests() {
+        try {
+            if (!Files.exists(RESULTS_DIR)) {
+                 log.info("No previous test reports found");
+                 return Collections.emptyList();
+            }
+
+            try (DirectoryStream<Path> stream = Files.newDirectoryStream(RESULTS_DIR, REPORT_FILTER)) {
+                return StreamSupport.stream(stream.spliterator(), false).collect(Collectors.toList());
+            }
+        }
+        catch (IOException e) {
+            handleRecoverableError("Could not load test reports", e);
+            return Collections.emptyList();
         }
     }
 
-    private static void saveReports(List<TestReport> reports, TestConfig config) {
+    private void saveReports(List<TestReport> reports, TestConfig config) {
         try {
-            final String testName = UUID.randomUUID().toString();
-            try (PrintWriter pw = new PrintWriter(RESULTS_DIR.resolve("CST-" + testName).toFile())) {
+            if (!Files.exists(RESULTS_DIR)) {
+                Files.createDirectory(RESULTS_DIR);
+            }
+            final String testName = REPORT_PREFIX + UUID.randomUUID();
+
+            val testPath = RESULTS_DIR.resolve(testName);
+            Files.createDirectory(testPath);
+
+            try (PrintWriter pw = new PrintWriter(testPath.resolve(REPORTS[0]).toFile())) {
                 printHeader(pw, config);
                 for (TestReport report : reports) {
                     pw.println(report.getClientServeTime());
                 }
             }
-            try (PrintWriter pw = new PrintWriter(RESULTS_DIR.resolve("CWT-" + testName).toFile())) {
+            try (PrintWriter pw = new PrintWriter(testPath.resolve(REPORTS[1]).toFile())) {
                 printHeader(pw, config);
                 for (TestReport report : reports) {
                     pw.println(report.getClientWorkTime());
                 }
             }
-            try (PrintWriter pw = new PrintWriter(RESULTS_DIR.resolve("RQT-" + testName).toFile())) {
+            try (PrintWriter pw = new PrintWriter(testPath.resolve(REPORTS[2]).toFile())) {
                 printHeader(pw, config);
                 for (TestReport report : reports) {
                     pw.println(report.getRequestHandleTime());
                 }
             }
-        } catch (FileNotFoundException e) {
-            log.error("Failed to save report", e);
+        } catch (IOException e) {
+            handleRecoverableError("Failed to save report", e);
         }
     }
 
@@ -231,53 +254,5 @@ public class Application extends JFrame {
         };
 
         JOptionPane.showMessageDialog(this, message, "Error", JOptionPane.ERROR_MESSAGE);
-    }
-
-    private TestReport runTest(int numRequests, int numClients, ServerMode mode, int delay, int arraySize) {
-        final Server server;
-        try {
-            server = ServerFactory.create(31001, mode);
-        } catch (IOException e) {
-            handleRecoverableError("Could not start server", e);
-            return null;
-        }
-        final List<Client> clients = new ArrayList<>(numClients);
-        IntStream.range(0, numClients).forEach(x -> clients.add(new Client("localhost", 31001)));
-        final ExecutorService serverExecutor = Executors.newSingleThreadExecutor();
-        serverExecutor.execute(server::start);
-        final ExecutorService clientExecutor = Executors.newFixedThreadPool(numClients);
-        final Client.RequestConfig requestConfig = Client.RequestConfig.builder()
-                .numRequests(numRequests)
-                .arraySize(arraySize)
-                .sendDelay(delay)
-                .keepConnection(mode.isKeepConnection())
-                .build();
-
-        List<Future<Long>> futures = new ArrayList<>(numClients);
-        for (Client client : clients) {
-            futures.add(clientExecutor.submit(() -> {
-                try {
-                    return client.sendRequests(requestConfig);
-                } catch (ServerUnavailableException | InterruptedException e) {
-                    throw new RuntimeException(e);
-                }
-            }));
-        }
-        final double averageClientWorkTime = futures.stream().mapToLong(x -> {
-            try {
-                return x.get();
-            } catch (InterruptedException | ExecutionException e) {
-                log.error("Error during execution", e);
-                return Long.MAX_VALUE;
-            }
-        }).average().orElse(0);
-
-        clientExecutor.shutdownNow();
-        serverExecutor.shutdownNow();
-        return TestReport.builder()
-                .clientWorkTime(averageClientWorkTime)
-                .clientServeTime(server.getAverageClientServeTime())
-                .requestHandleTime(server.getAverageRequestHandleTime())
-                .build();
     }
 }

@@ -27,4 +27,13 @@ public enum ServerMode {
     public boolean isKeepConnection() {
         return keepConnection;
     }
+
+    public static ServerMode parse(String s) {
+        for (final ServerMode serverMode : values()) {
+            if (s.equals(serverMode.toString())) {
+                return serverMode;
+            }
+        }
+        return null;
+    }
 }

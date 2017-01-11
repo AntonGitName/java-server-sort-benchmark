@@ -1,5 +1,7 @@
 package ru.mit.spbau.antonpp.benchmark.app;
 
+import ru.mit.spbau.antonpp.benchmark.server.ServerMode;
+
 /**
  * @author antonpp
  * @since 25/12/2016
@@ -40,5 +42,15 @@ public enum ParameterType {
     @Override
     public String toString() {
         return description;
+    }
+
+    public static ParameterType parse(String s) {
+        for (final ParameterType x : values()) {
+            if (s.equals(x.toString())) {
+                return x;
+            }
+        }
+        return null;
+
     }
 }
