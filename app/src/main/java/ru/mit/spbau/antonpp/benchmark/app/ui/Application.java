@@ -171,15 +171,11 @@ public class Application extends JFrame {
     private void onTestFail(TestExecutionException e) {
         handleRecoverableError(e.getMessage(), e.getCause());
         testProgress.stop();
-        revalidate();
-        repaint();
     }
 
     private void onTestFinish() {
         tableModel.resetRows(reloadTests());
         testProgress.stop();
-        revalidate();
-        repaint();
     }
 
     private List<Path> reloadTests() {

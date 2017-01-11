@@ -32,6 +32,7 @@ public class ResultTableModel extends AbstractTableModel {
         for (val name : names) {
             rows.add(new Row(name));
         }
+        fireTableDataChanged();
     }
 
     @Override
@@ -73,10 +74,7 @@ public class ResultTableModel extends AbstractTableModel {
 
     @Override
     public boolean isCellEditable(int rowIndex, int columnIndex) {
-        if (columnIndex == 1) {
-            return true;
-        }
-        return super.isCellEditable(rowIndex, columnIndex);
+        return columnIndex == 1 || super.isCellEditable(rowIndex, columnIndex);
     }
 
     private final class Row {
